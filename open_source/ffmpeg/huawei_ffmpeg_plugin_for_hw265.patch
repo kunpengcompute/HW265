@@ -373,7 +373,7 @@ diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265-POC/libavcodec/l
 +{
 +    int ret;
 +    Libhw265Context *ctx = avctx->priv_data;
-+    
++
 +    if (pic) {
 +        for (int i = 0; i < HWE_MAX_PLANE; ++i) {
 +            ctx->input.inData.pixel[i] = pic->data[i];
