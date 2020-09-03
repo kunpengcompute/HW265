@@ -1,6 +1,6 @@
-diff -urN ffmpeg-4.2.2/configure ffmpeg-4.2.2-hw265/configure
+diff -urN ffmpeg-4.2.2/configure ffmpeg-4.2.2-hw265-POC/configure
 --- ffmpeg-4.2.2/configure	2020-01-01 05:35:22.000000000 +0800
-+++ ffmpeg-4.2.2-hw265/configure	2020-06-22 16:56:27.000000000 +0800
++++ ffmpeg-4.2.2-hw265-POC/configure	2020-09-03 17:21:55.036000000 +0800
 @@ -282,6 +282,7 @@
    --enable-libwebp         enable WebP encoding via libwebp [no]
    --enable-libx264         enable H.264 encoding via x264 [no]
@@ -33,9 +33,9 @@ diff -urN ffmpeg-4.2.2/configure ffmpeg-4.2.2-hw265/configure
  enabled libxavs           && require libxavs "stdint.h xavs.h" xavs_encoder_encode "-lxavs $pthreads_extralibs $libm_extralibs"
  enabled libxavs2          && require_pkg_config libxavs2 "xavs2 >= 1.3.0" "stdint.h xavs2.h" xavs2_api_get
  enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
-diff -urN ffmpeg-4.2.2/libavcodec/allcodecs.c ffmpeg-4.2.2-hw265/libavcodec/allcodecs.c
+diff -urN ffmpeg-4.2.2/libavcodec/allcodecs.c ffmpeg-4.2.2-hw265-POC/libavcodec/allcodecs.c
 --- ffmpeg-4.2.2/libavcodec/allcodecs.c	2020-01-01 05:35:23.000000000 +0800
-+++ ffmpeg-4.2.2-hw265/libavcodec/allcodecs.c	2020-06-22 16:54:40.000000000 +0800
++++ ffmpeg-4.2.2-hw265-POC/libavcodec/allcodecs.c	2020-09-03 17:21:54.840000000 +0800
 @@ -724,6 +724,7 @@
  extern AVCodec ff_libx264_encoder;
  extern AVCodec ff_libx264rgb_encoder;
@@ -44,10 +44,10 @@ diff -urN ffmpeg-4.2.2/libavcodec/allcodecs.c ffmpeg-4.2.2-hw265/libavcodec/allc
  extern AVCodec ff_libxavs_encoder;
  extern AVCodec ff_libxavs2_encoder;
  extern AVCodec ff_libxvid_encoder;
-diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265/libavcodec/libhw265.c
+diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265-POC/libavcodec/libhw265.c
 --- ffmpeg-4.2.2/libavcodec/libhw265.c	1970-01-01 08:00:00.000000000 +0800
-+++ ffmpeg-4.2.2-hw265/libavcodec/libhw265.c	2020-07-20 15:08:42.976020900 +0800
-@@ -0,0 +1,393 @@
++++ ffmpeg-4.2.2-hw265-POC/libavcodec/libhw265.c	2020-09-03 17:18:05.000000000 +0800
+@@ -0,0 +1,397 @@
 +/*
 + * HW265 encoder library plugin for FFmpeg
 + *
@@ -136,11 +136,13 @@ diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265/libavcodec/libhw
 +{
 +    Libhw265Context *ctx = avctx->priv_data;
 +    if (ctx->pktWriteIndex == ctx->pktReadIndex) {
-+        pthread_mutex_unlock(&ctx->pktBufMutex);
 +        if (!ctx->isSendEND || (ctx->isSendEND && ctx->isCodeEND)) {
 +            return AVERROR(EAGAIN);
 +        }
 +        while (ctx->pktWriteIndex == ctx->pktReadIndex) {
++            if (!ctx->isCodeEND) {
++                return AVERROR(EAGAIN);
++            }
 +            usleep(10); // sleep 10 us
 +        }
 +    }
@@ -244,12 +246,7 @@ diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265/libavcodec/libhw
 +    ctx->isSendEND = 0;
 +    memset(&ctx->input, 0, sizeof(HWE_Input));
 +    ctx->encHandle = NULL;
-+    if (ctx->twoPassFrameInfoFile) {
-+        memcpy(ctx->creatParams.rcParam.twoPassFrameInfoFile, ctx->twoPassFrameInfoFile, HWE_MAX_FILE_PATH);
-+    }
-+    if (ctx->twoPassBlockInfoFile) {
-+        memcpy(ctx->creatParams.rcParam.twoPassBlockInfoFile, ctx->twoPassBlockInfoFile, HWE_MAX_FILE_PATH);
-+    }
++
 +    // Default value
 +    ret = HWE_ParamDefault(&ctx->creatParams);
 +    if (ret != HWE_RET_OK) {
@@ -257,6 +254,13 @@ diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265/libavcodec/libhw
 +        Libhw265EncodeClose(avctx);
 +        return HWE_RET_FAILED;
 +    }
++    if (ctx->twoPassFrameInfoFile) {
++        memcpy(ctx->creatParams.rcParam.twoPassFrameInfoFile, ctx->twoPassFrameInfoFile, HWE_MAX_FILE_PATH);
++    }
++    if (ctx->twoPassBlockInfoFile) {
++        memcpy(ctx->creatParams.rcParam.twoPassBlockInfoFile, ctx->twoPassBlockInfoFile, HWE_MAX_FILE_PATH);
++    }
++
 +    return HWE_RET_OK;
 +}
 +
@@ -441,9 +445,9 @@ diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265/libavcodec/libhw
 +    .capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_AUTO_THREADS,
 +    .wrapper_name = "libhw265",
 +};
-diff -urN ffmpeg-4.2.2/libavcodec/Makefile ffmpeg-4.2.2-hw265/libavcodec/Makefile
+diff -urN ffmpeg-4.2.2/libavcodec/Makefile ffmpeg-4.2.2-hw265-POC/libavcodec/Makefile
 --- ffmpeg-4.2.2/libavcodec/Makefile	2020-01-01 05:35:22.000000000 +0800
-+++ ffmpeg-4.2.2-hw265/libavcodec/Makefile	2020-06-22 16:51:41.000000000 +0800
++++ ffmpeg-4.2.2-hw265-POC/libavcodec/Makefile	2020-09-03 17:21:54.852000000 +0800
 @@ -1007,6 +1007,7 @@
  OBJS-$(CONFIG_LIBX262_ENCODER)            += libx264.o
  OBJS-$(CONFIG_LIBX264_ENCODER)            += libx264.o
