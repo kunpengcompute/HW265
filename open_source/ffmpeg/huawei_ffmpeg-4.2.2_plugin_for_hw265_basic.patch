@@ -46,8 +46,8 @@ diff -urN ffmpeg-4.2.2/libavcodec/allcodecs.c ffmpeg-4.2.2-hw265-basic/libavcode
  extern AVCodec ff_libxvid_encoder;
 diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265-basic/libavcodec/libhw265.c
 --- ffmpeg-4.2.2/libavcodec/libhw265.c	1970-01-01 08:00:00.000000000 +0800
-+++ ffmpeg-4.2.2-hw265-basic/libavcodec/libhw265.c	2020-09-12 16:00:49.240000000 +0800
-@@ -0,0 +1,357 @@
++++ ffmpeg-4.2.2-hw265-basic/libavcodec/libhw265.c	2020-09-28 14:06:26.012000000 +0800
+@@ -0,0 +1,356 @@
 +/*
 + * HW265 encoder library plugin for FFmpeg
 + *
@@ -339,11 +339,10 @@ diff -urN ffmpeg-4.2.2/libavcodec/libhw265.c ffmpeg-4.2.2-hw265-basic/libavcodec
 +            ctx->pts_write_index++;
 +            pthread_mutex_unlock(&ctx->pts_buf_mutex);
 +        }
-+        ctx->input.inData.pixelSize[0] = avctx->width * avctx->height;
-+        ctx->input.inData.pixelSize[1] = ctx->input.inData.pixelSize[2] = (avctx->width >> 1) * (avctx->height >> 1);
 +        for (int i = 0; i < HWE_MAX_PLANE; ++i) {
 +            ctx->input.inData.pixel[i] = pic->data[i];
 +            ctx->input.inData.stride[i] = pic->linesize[i];
++            ctx->input.inData.pixelSize[i] = pic->linesize[i] * pic->height;
 +        }
 +        ctx->input.inFrameInfo.pts = pic->pts;
 +        ctx->input.inFrameInfo.frameType = HWE_FRAME_TYPE_INVALID;
