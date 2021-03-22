@@ -1,1 +1,1 @@
-# HW265 video encoder open source repository.
+# HW265 Video Encoder Open Source Library.
