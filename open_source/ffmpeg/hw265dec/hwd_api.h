@@ -1,3 +1,10 @@
+/*
+ * copyright (c) Huawei Technologies Co., Ltd.2020-2021, All rights reserved
+ * Description: API header for libhw265dec
+ * Auther: Huawei
+ * Create: 2019-7-15
+ */
+
 #ifndef IHW265DEC_API_H
 #define IHW265DEC_API_H
 
