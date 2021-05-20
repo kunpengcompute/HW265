@@ -48,8 +48,8 @@ diff -urN ffmpeg-4.3/libavcodec/allcodecs.c ffmpeg-4.3-hw265dec/libavcodec/allco
  extern AVCodec ff_hevc_rkmpp_decoder;
 diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c
 --- ffmpeg-4.3/libavcodec/libhw265dec.c	1970-01-01 08:00:00.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-05-11 15:22:55.229682433 +0800
-@@ -0,0 +1,624 @@
++++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-05-20 09:53:16.691765660 +0800
+@@ -0,0 +1,661 @@
 +/*
 + * HW265DEC decoder for hevc
 + * copyright (c) 2020-2021 Huawei Technologies Co., Ltd.
@@ -339,9 +339,45 @@ diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/lib
 +        return ret;
 +}
 +
++static int CheckQsProcess(AVCodecContext *avctx)
++{
++    FILE *fp = NULL;
++    int count = 0;
++    char buf[256]; // 256: max buf
++    char command[] = "ps -ef | grep DAssistantd | grep -v grep | wc -l";
++
++    if ((fp = popen(command,"r")) == NULL) {
++        av_log(avctx, AV_LOG_ERROR, "popen error\n");
++        return 0;
++    }
++    if ((fgets(buf, sizeof(buf), fp)) != NULL) {
++        count = atoi(buf);
++    }
++
++    fclose(fp);
++    return count;
++}
++
++static void StartQsCheckServer(AVCodecContext *avctx)
++{
++    if (CheckQsProcess(avctx) > 0) {
++        av_log(avctx, AV_LOG_INFO, "DAssistantd exists\n");
++        return;
++    }
++    if (access("/usr/local/bin/DAssistantd", 0) == 0 && popen("DAssistantd", "r") != NULL) {
++        if (CheckQsProcess(avctx) > 0) {
++            av_log(avctx, AV_LOG_INFO, "DAssistantd started\n");
++        } else {
++            av_log(avctx, AV_LOG_ERROR, "DAssistantd start fail\n");
++        }
++    } else {
++        av_log(avctx, AV_LOG_ERROR, "Cannot start DAssistantd\n");
++    }
++}
++
 +static av_cold int hw265_decode_init(AVCodecContext *avctx)
 +{
-+	int ret = AVERROR_INVALIDDATA;
++    int ret = AVERROR_INVALIDDATA;
 +    HW265DecContext *ctx = NULL;
 +    if (!avctx || !avctx->priv_data) {
 +        av_log(avctx, AV_LOG_ERROR, "null object\n");
@@ -362,6 +398,7 @@ diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/lib
 +        }
 +    }
 +
++    StartQsCheckServer(avctx);
 +    ret = HWD_Create(&ctx->handle, &ctx->initParams);
 +    if (ret != IHW265D_OK) {
 +        av_log(avctx, AV_LOG_ERROR, "ERROR: IHW265D_Create fail\n");
