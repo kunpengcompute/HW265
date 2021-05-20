@@ -1,3 +1,5 @@
+copyright (c) Huawei Technologies Co., Ltd.2020-2021, All rights reserved
+
 diff -urN ffmpeg-4.3/configure ffmpeg-4.3-hw265dec/configure
 --- ffmpeg-4.3/configure	2020-06-16 02:54:23.000000000 +0800
 +++ ffmpeg-4.3-hw265dec/configure	2021-04-26 20:01:58.279348206 +0800
