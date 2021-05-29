@@ -1,12 +1,12 @@
 /*
- * copyright (c) Huawei Technologies Co., Ltd.2020-2021, All rights reserved
- * Description: API header for libhw265dec
- * Auther: Huawei
- * Create: 2019-7-15
- */
-
-#ifndef IHW265DEC_API_H
-#define IHW265DEC_API_H
+* Copyright (c) Huawei Technologies Co., Ltd. 2019-2020. All rights reserved.
+* Description:
+* Author: Huawei
+* Create: 2019-7-15
+* Notes:
+*/
+#ifndef HW265DEC_API_H /* Macro sentry to avoid redundant including */
+#define HW265DEC_API_H
 
 #include <stdint.h>
 #include <stdarg.h>
@@ -15,20 +15,54 @@
 extern "C" {
 #endif
 
-typedef enum TAG_IHW265VIDEO_ALG_LOG_LEVEL {
-    IHW265VIDEO_ALG_LOG_ERROR = 0,
-    IHW265VIDEO_ALG_LOG_WARNING,
-    IHW265VIDEO_ALG_LOG_INFO,
-    IHW265VIDEO_ALG_LOG_DEBUG
-} IHW265VIDEO_ALG_LOG_LEVEL;
+// Log level
+typedef enum TAG_HW265VIDEO_ALG_LOG_LEVEL {
+    HW265VIDEO_ALG_LOG_ERROR = 0,  // log for error
+    HW265VIDEO_ALG_LOG_WARNING,    // log for waring
+    HW265VIDEO_ALG_LOG_INFO,       // log for help
+    HW265VIDEO_ALG_LOG_DEBUG       // print debug info, used for developer debug
+} HW265VIDEO_ALG_LOG_LEVEL;
+typedef void *HWD_Handle;  // Decoder handle
 
-typedef void *HWD_Handle;
+/******************************************************************************
+* Instruction : memory create callback func type
+*
+* Param : channelID - [in] channel ID
+*         size      - [in] memory size
+*
+* Return Value :  Success return memory address
+*           Failed return NULL
+*******************************************************************************/
+typedef void *(*HW265D_VIDEO_ALG_MALLOC_FXN)(uint32_t channelID, uint32_t size);
 
-typedef void *(*IHW265D_VIDEO_ALG_MALLOC_FXN)(uint32_t channelID, uint32_t size);
-typedef void (*IHW265D_VIDEO_ALG_FREE_FXN)(uint32_t channelID, void *ptr);
-typedef void (*IHW265D_VIDEO_ALG_LOG_FXN)(uint32_t channelID, IHW265VIDEO_ALG_LOG_LEVEL level, int8_t *msg, ...);
+/******************************************************************************
+* Instruction   :  memory free callback func type
+*
+* Param   :  channelID - [in] channel ID
+*            ptr       - [in] memory address
+*
+* Return Value :  Null
+*******************************************************************************/
+typedef void (*HW265D_VIDEO_ALG_FREE_FXN)(uint32_t channelID, void *ptr);
 
+/******************************************************************************
+* Instruction   :  log callback func type
+*
+* Param  :  channelID - [in] channel ID
+*           level     - [in] set log level
+*           msg       - [in] log info(string)
+*           ...       - [in] changeable param
+*
+* Return Value :  Null
+*******************************************************************************/
+typedef void (*HW265D_VIDEO_ALG_LOG_FXN)(uint32_t channelID, HW265VIDEO_ALG_LOG_LEVEL level, int8_t *msg, ...);
+
+
+/******************************************************************************
+*                             Dynamic and static lib config
+*******************************************************************************/
 #if defined(_MSC_VER)
+
 #if defined(HW_VIDEO_ALG_EXPORTS_DLL)
 #define HWD_API extern __declspec(dllexport)
 #elif defined(HW_VIDEO_ALG_EXPORTS_LIB)
@@ -36,92 +70,98 @@ typedef void (*IHW265D_VIDEO_ALG_LOG_FXN)(uint32_t channelID, IHW265VIDEO_ALG_LO
 #else
 #define HWD_API
 #endif
+
 #define inline __inline
+
 #elif defined(__GNUC__)
 #define HWD_API
 #else
 #define HWD_API
 #endif
 
+
+// Supported slice type
 typedef enum {
     IH265D_B_SLICE = 0,
     IH265D_P_SLICE = 1,
-    IH265D_I_SLICE = 2,
+    IH265D_I_SLICE = 2
 } SLICE_TYPE;
 
-typedef enum {
+typedef enum TAG_HW265D_FRAMETYPE {
     IH265D_FRAME_I = 0,
     IH265D_FRAME_P,
     IH265D_FRAME_B,
-    IH265D_FRAME_UNKNOWN,
+    IH265D_FRAME_UNKNOWN
 } HW265D_FRAMETYPE;
 
-typedef enum {
-    IH265D_DECODE = 0,
-    IH265D_DECODE_END
+typedef enum TAG_HW265D_DECODEMODE {
+    IH265D_DECODE = 0,  // Safe decode
+    IH265D_DECODE_END   // Decode over and decoder output the residual picture
 } HW265D_DECODEMODE;
 
-typedef enum {
+typedef enum TAG_HW265D_DECODESTATUS {
     IH265D_GETDISPLAY = 0,
     IH265D_NEED_MORE_BITS,
     IH265D_NO_PICTURE,
     IH265D_ERR_HANDLE
 } HW265D_DECODESTATUS;
 
-typedef enum {
+// Thread type
+typedef enum TAG_HW265D_THREADTYPE {
     IH265D_SINGLE_THREAD = 0,
     IH265D_MULTI_THREAD
 } HW265D_THREADTYPE;
 
-typedef enum {
-    IH265D_DECODE_ORDER = 0,
-    IH265D_DISPLAY_ORDER
+// Output order
+typedef enum TAG_HW265D_OUTPUTORDER {
+    IH265D_DECODE_ORDER = 0,  // Output by decoder order
+    IH265D_DISPLAY_ORDER      // Output by display order
 } HW265D_OUTPUTORDER;
 
-#define IHW265VIDEO_ALG_VERSION_LENGTH 48
-#define IHW265VIDEO_ALG_TIME_LENGTH 28
-
+// Version
+#define HW265VIDEO_ALG_VERSION_LENGTH 48 // version array lenth
+#define HW265VIDEO_ALG_TIME_LENGTH    28 // module compile time array lenth
 typedef struct TagHWDVersion {
-    int8_t versionChar[IHW265VIDEO_ALG_VERSION_LENGTH];
-    int8_t releaseTime[IHW265VIDEO_ALG_TIME_LENGTH];
-    uint32_t compileVersion;
+    int8_t versionChar[HW265VIDEO_ALG_VERSION_LENGTH];  // library version
+    int8_t releaseTime[HW265VIDEO_ALG_TIME_LENGTH];     // compiled time
+    uint32_t compileVersion;                            // compiler version
 } HWDVersion;
 
 typedef struct TagHW265DUserData {
-    uint32_t userDataType;
-    uint32_t userDataSize;
-    uint8_t *userData;
+    uint32_t userDataType;  // User data type
+    uint32_t userDataSize;  // User data size
+    uint8_t *userData;      // User data buffer
 
-    struct TagHW265DUserData *next;
+    struct TagHW265DUserData *next;  // Direct next user data
 } HW265DUserData;
 
 typedef struct TagHWDInitParam {
-    uint32_t channelID;
-    int32_t maxWidth;
-    int32_t maxHeight;
-    int32_t maxRefNum;
-    int32_t maxVPSNum;
-    int32_t maxSPSNum;
-    int32_t maxPPSNum;
+    uint32_t channelID;  // [in] channel ID, used for channel info
+    int32_t maxWidth;     // [in] maximum width,[8,16384]
+    int32_t maxHeight;    // [in] maximum height,[8,16384]
+    int32_t maxRefNum;    // [in] maximum reference num,[0,15]
+    int32_t maxVPSNum;    // [in] maximum vps num,[1,16]
+    int32_t maxSPSNum;    // [in] maximum sps num,[1,16]
+    int32_t maxPPSNum;    // [in] maximum pps num,[1,64]
 
-    uint32_t bitDepth;
+    uint32_t bitDepth;   // [in]bitdepth,8 or 10
 
-    HW265D_THREADTYPE threadType;
-    HW265D_OUTPUTORDER outputOrder;
+    HW265D_THREADTYPE threadType;    // thread type,0: singal thread; 1: multi thread
+    HW265D_OUTPUTORDER outputOrder;  // output type only used for DecodeFrame mode
 
-    IHW265D_VIDEO_ALG_MALLOC_FXN mallocFxn;
-    IHW265D_VIDEO_ALG_FREE_FXN freeFxn;
-    IHW265D_VIDEO_ALG_LOG_FXN logFxn;
+    HW265D_VIDEO_ALG_MALLOC_FXN mallocFxn;  // different with SCCENC
+    HW265D_VIDEO_ALG_FREE_FXN freeFxn;
+    HW265D_VIDEO_ALG_LOG_FXN logFxn;  // log output callback function
 } HWDCreateParams;
 
-typedef struct TagHWDInputParams {
-    uint8_t *streamData;
-    uint32_t streamLen;
+typedef struct TagHWDInputParams  {
+    uint8_t *streamData; // 解码的码流
+    uint32_t streamLen; // iNaluLen NAL长度
     uint64_t timeStamp;
     HW265D_DECODEMODE decodeMode;
 } HWDInputParams;
 
-typedef struct TagCuOutputInfo {
+typedef struct TagCuOutputInfo  {
     uint32_t cuNumIntra4;
     uint32_t cuNumIntra8;
     uint32_t cuNumIntra16;
@@ -143,8 +183,8 @@ typedef struct TagCuOutputInfo {
 } CuOutputInfo;
 
 typedef struct TagHWDOutputParams {
-    uint32_t channelID;
-    uint32_t bytsConsumed;
+    uint32_t channelID;  // [out] channel ID, used for identify channel info
+    uint32_t bytsConsumed; // 已经解码的长度
 
     uint64_t timeStamp;
     HW265D_FRAMETYPE eFrameType;
@@ -155,93 +195,152 @@ typedef struct TagHWDOutputParams {
     uint32_t yStride;
     uint32_t uvStride;
 
-    uint32_t bitDepthY;
-    uint32_t bitDepthC;
-    int32_t displayPrimariesX0;
-    int32_t displayPrimariesX1;
-    int32_t displayPrimariesX2;
-    int32_t displayPrimariesY0;
-    int32_t displayPrimariesY1;
-    int32_t displayPrimariesY2;
-    int32_t whitePointX;
-    int32_t whitePointY;
-    int32_t maxDisplayMasteringLuma;
-    int32_t minDisplayMasteringLuma;
-    int32_t maxContentLightLevel;
-    int32_t maxPicAverageLightLevel;
-    uint8_t *outYUVData[3];
+    uint32_t bitDepthY;              // luma bitdepth
+    uint32_t bitDepthC;              // chroma bitdepth
+    int32_t displayPrimariesX0;       // hdr10 luma x coordinate
+    int32_t displayPrimariesX1;       // hdr10  Cb  x coordinate
+    int32_t displayPrimariesX2;       // hdr10  Cr  x coordinate
+    int32_t displayPrimariesY0;       // hdr10 luma y coordinate
+    int32_t displayPrimariesY1;       // hdr10  Cb  y coordinate
+    int32_t displayPrimariesY2;       // hdr10  Cr  y coordinate
+    int32_t whitePointX;              // hdr10 white point x coordinate
+    int32_t whitePointY;              // hdr10 white point y coordinate
+    int32_t maxDisplayMasteringLuma;  // max hdr10 luma level
+    int32_t minDisplayMasteringLuma;  // min hdr10 luma level
+    int32_t maxContentLightLevel;     // max hdr10 content light level
+    int32_t maxPicAverageLightLevel;  // min hdr10 content light level
+    uint8_t *outYUVData[3];  // YUV address, store YUV in order, 3: means YUV
 
+    // bitlen
     uint32_t codingBytesOfCurFrm;
-
+    // sei
     HW265DUserData userData;
-
+    // vui
     uint32_t aspectRatioIdc;
     uint32_t sarWidth;
     uint32_t sarHeight;
+
+    // vps
     uint32_t vpsNumUnitsInTick;
     uint32_t vpsTimeScale;
-
+    // cuinfo
     CuOutputInfo cuOutInfo;
-
+    // errorinfo
     int32_t isError;
+
     uint32_t layerIdx;
     uint32_t poc;
     int32_t isScc;
 } HWDOutputParams;
 
+/*******************************************************************************
+* All error code are negative value
+* bit[31:24]: show if it has error, 0xF0 for fatal error, need to exit; warning error such as 0xE0,
+* decoder can not ensure validity
+* bit[23:16]: show error algorithm, 40 for H.265
+* bit[15:0] : show inside error, 1xxxx for general error, 2xxxx for init error, 3xxxx for control error,
+* 4xxxx for process error, 5xxxx for delete error..
+*******************************************************************************/
 typedef enum TAG_HWD_RETURNVAL {
-    IHW265D_FAILED = -1,
-    IHW265D_OK = 0,
-    IHW265D_NEED_MORE_BITS = 1,
-    IHW265D_FIND_NEW_PIC = 2,
+    // Suceess return
+    HW265D_FAILED = -1,         // Call Failed
+    HW265D_OK = 0,              // Call ok
+    HW265D_NEED_MORE_BITS = 1,  // Call ok, but need more bit for a frame
+    HW265D_FIND_NEW_PIC = 2,
+    // Warning return code
+    HW265D_NAL_HEADER_WARNING = 0x00000004,
+    HW265D_VPS_WARNING = 0x00000008,
+    HW265D_SPS_WARNING = 0x00000010,
+    HW265D_PPS_WARNING = 0x00000020,
+    HW265D_SLICEHEADER_WARNING = 0x00000040,
+    HW265D_SLICEDATA_WARNING = 0x00000080,
 
-    IHW265D_NAL_HEADER_WARNING = 0x00000004,
-    IHW265D_VPS_WARNING = 0x00000008,
-    IHW265D_SPS_WARNING = 0x00000010,
-    IHW265D_PPS_WARNING = 0x00000020,
-    IHW265D_SLICEHEADER_WARNING = 0x00000040,
-    IHW265D_SLICEDATA_WARNING = 0x00000080,
+    // General error
+    HW265D_INVALID_ARGUMENT = 0xF0401000,  // Input parameter is wrong
+    HW265D_DECODER_NOT_CREATE,             // Decoder not creted
 
-    IHW265D_INVALID_ARGUMENT = 0xF0401000,
-    IHW265D_DECODER_NOT_CREATE,
+    // Init error
+    HW265D_MALLOC_FAIL = 0xF0402000,  // memory malloc failed
+    HW265D_INVALID_MAX_WIDTH,         // maximum width exceed limit
+    HW265D_INVALID_MAX_HEIGHT,        // maximum height exceed limit
+    HW265D_INVALID_MAX_REF_PIC,       // maximum reference num exceed limit
+    HW265D_INVALID_MAX_VPS_NUM,       // maximum vps num exceed limit
+    HW265D_INVALID_MAX_SPS_NUM,       // maximum sps num exceed limit
+    HW265D_INVALID_MAX_PPS_NUM,       // maximum pps num exceed limit
+    HW265D_INVALID_THREAD_CONTROL,    // error thread control
+    HW265D_INVALID_MALLOC_FXN,        // malloc callback function pointer invalid
+    HW265D_INVALID_FREE_FXN,          // free callback function pointer invalid
+    HW265D_INVALID_LOG_FXN,           // log callback function pointer invalid
+    HW265D_STREAMBUF_NULL,            // decoder input stram buf is empty
+    HW265D_INVALID_STREAMBUF_LENGTH,  // decoder input stream lenth error
+    HW265D_YUVBUF_NULL,               // decoder output yuv buffer pointer is NULL
+    HW265D_YUVBUF_ADDR_NOT_ALIGN_16,  // decoder output yuv buffer address not alignment by 16 byte
+    HW265D_POSTPROCESS_ERR,           // postprocess select error
+    HW265D_ERRCONCEAL_ERR,            // error canceal parameter config error
 
-    IHW265D_MALLOC_FAIL = 0xF0402000,
-    IHW265D_INVALID_MAX_WIDTH,
-    IHW265D_INVALID_MAX_HEIGHT,
-    IHW265D_INVALID_MAX_REF_PIC,
-    IHW265D_INVALID_MAX_VPS_NUM,
-    IHW265D_INVALID_MAX_SPS_NUM,
-    IHW265D_INVALID_MAX_PPS_NUM,
-    IHW265D_INVALID_THREAD_CONTROL,
-    IHW265D_INVALID_MALLOC_FXN,
-    IHW265D_INVALID_FREE_FXN,
-    IHW265D_INVALID_LOG_FXN,
-    IHW265D_STREAMBUF_NULL,
-    IHW265D_INVALID_STREAMBUF_LENGTH,
-    IHW265D_YUVBUF_NULL,
-    IHW265D_YUVBUF_ADDR_NOT_ALIGN_16,
-    IHW265D_POSTPROCESS_ERR,
-    IHW265D_ERRCONCEAL_ERR,
-
-    IHW265D_NAL_HEADER_ERR = 0xF0404001,
-    IHW265D_VPS_ERR = 0xF0404002,
-    IHW265D_SPS_ERR = 0xF0404003,
-    IHW265D_PPS_ERR = 0xF0404004,
-    IHW265D_SLICEHEADER_ERR = 0xF0404005,
-    IHW265D_SLICEDATA_ERR = 0xF0404006,
-
-    IHW265D_FRAME_DECODE_WARN = 0xE0404007,
-    IHW265D_THREAD_ERROR = 0xE0404008,
-    IHW265D_BITDEPTH_ERROR = 0xE0404009
+    // Decode error
+    HW265D_NAL_HEADER_ERR = 0xF0404001,   // NAL decode error
+    HW265D_VPS_ERR = 0xF0404002,          // vps decode error
+    HW265D_SPS_ERR = 0xF0404003,          // sps decode error
+    HW265D_PPS_ERR = 0xF0404004,          // pps decode error
+    HW265D_SLICEHEADER_ERR = 0xF0404005,  // sliceheader decode error
+    HW265D_SLICEDATA_ERR = 0xF0404006,    // slicedata decode error
+    // Decode warning
+    // frame data warning, the stream may has error code, output yuv picture quality can not be provided
+    HW265D_FRAME_DECODE_WARN = 0xE0404007,
+    HW265D_THREAD_ERROR = 0xE0404008,       // multi thread error
+    HW265D_BITDEPTH_ERROR = 0xE0404009      // bitdepth error
 } HWD_RETURNVAL;
 
+/******************************************************************************
+* Instruction : create decoder handle
+*
+* Param : decoderHandle   - [out] decoder handle pointer
+*         createParams- [in]  decoder init config parameter set address
+*
+* Return Value :  Success return HW265D_OK
+*           Failed return other return code
+*******************************************************************************/
 HWD_API HWD_RETURNVAL HWD_Create(HWD_Handle *decoderHandle, HWDCreateParams *createParams);
-HWD_API HWD_RETURNVAL HWD_DecodeAU(HWD_Handle decoderHandle, HWDInputParams *inputParams, HWDOutputParams *outputParams);
-HWD_API HWD_RETURNVAL HWD_DecodeStream(HWD_Handle decoderHandle, HWDInputParams *inputParams, HWDOutputParams *outputParams);
+
+/******************************************************************************
+* Instruction : decode a frame data
+*
+* Param   :  hDecoder    - [in]  decoder handle
+*           inputParams   - [in]  input parameter struct pointer
+*           outputParams  - [out] output parameter struct pointer
+*
+* Return Value :  Success return HW265D_OK
+*           Failed return other return code
+*******************************************************************************/
+HWD_API HWD_RETURNVAL HWD_DecodeAU(HWD_Handle decoderHandle, HWDInputParams *inputParams,
+    HWDOutputParams *outputParams);
+
+HWD_API HWD_RETURNVAL HWD_DecodeStream(HWD_Handle decoderHandle, HWDInputParams *inputParams,
+    HWDOutputParams *outputParams);
+
+/******************************************************************************
+* Instruction : delete decoder
+*
+* Param   :  hDecoder - [in] decoder handle
+*
+* Return Value :  Success return HW265D_OK
+*           Failed return other return code
+*******************************************************************************/
 HWD_API HWD_RETURNVAL HWD_Delete(HWD_Handle decoderHandle);
+
+/******************************************************************************
+* Instruction : get decoder version
+*
+* Param   :  pstVersion - [out] version number struct pointer
+*
+* Return Value :  Success return HW265D_OK
+*           Failed return other return code
+*******************************************************************************/
 HWD_API HWD_RETURNVAL HWD_GetVersion(HWDVersion *version);
 
 #ifdef __cplusplus
 }
 #endif
-#endif
+#endif /* __HW265D_API_H__ */
+
