@@ -46,8 +46,8 @@ diff -urN ffmpeg-4.3/libavcodec/allcodecs.c ffmpeg-4.3-hw265dec/libavcodec/allco
  extern AVCodec ff_hevc_rkmpp_decoder;
 diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c
 --- ffmpeg-4.3/libavcodec/libhw265dec.c	1970-01-01 08:00:00.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-05-29 18:31:47.009702791 +0800
-@@ -0,0 +1,663 @@
++++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-05-31 11:06:42.215911829 +0800
+@@ -0,0 +1,662 @@
 +/*
 + * HW265DEC decoder for hevc
 + * copyright (c) 2020-2021 Huawei Technologies Co., Ltd.
@@ -212,7 +212,6 @@ diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/lib
 +    }
 +
 +    ctx = avctx->priv_data;
-+    ctx->class = &hw265_decoder_class;
 +    ctx->frame_read_index = 0;
 +    ctx->frame_write_index = 0;
 +    ctx->initParams.channelID = 0;
