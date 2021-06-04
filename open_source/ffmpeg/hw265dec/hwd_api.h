@@ -210,10 +210,9 @@ typedef struct TagHWDOutputParams {
 } HWDOutputParams;
 
 typedef enum TAG_HWD_RETURNVAL {
-    // Suceess return
-    HW265D_FAILED = -1,         // Call Failed
-    HW265D_OK = 0,              // Call ok
-    HW265D_NEED_MORE_BITS = 1,  // Call ok, but need more bit for a frame
+    HW265D_FAILED = -1,        // Call Failed
+    HW265D_OK = 0,             // Call ok
+    HW265D_NEED_MORE_BITS = 1, // Call ok, but need more bit for a frame
 
     // General error
     HW265D_INVALID_ARGUMENT = 0xF0401000, // Input parameter is wrong
@@ -312,4 +311,3 @@ HWD_API HWD_RETURNVAL HWD_GetVersion(HWDVersion *version);
 }
 #endif
 #endif /* __HW265D_API_H__ */
-
