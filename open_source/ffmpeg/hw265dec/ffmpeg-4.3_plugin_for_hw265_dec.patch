@@ -46,8 +46,8 @@ diff -urN ffmpeg-4.3/libavcodec/allcodecs.c ffmpeg-4.3-hw265dec/libavcodec/allco
  extern AVCodec ff_hevc_rkmpp_decoder;
 diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c
 --- ffmpeg-4.3/libavcodec/libhw265dec.c	1970-01-01 08:00:00.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-05-29 18:31:47.009702791 +0800
-@@ -0,0 +1,663 @@
++++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-06-04 19:02:20.979801596 +0800
+@@ -0,0 +1,662 @@
 +/*
 + * HW265DEC decoder for hevc
 + * copyright (c) 2020-2021 Huawei Technologies Co., Ltd.
@@ -212,7 +212,6 @@ diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/lib
 +    }
 +
 +    ctx = avctx->priv_data;
-+    ctx->class = &hw265_decoder_class;
 +    ctx->frame_read_index = 0;
 +    ctx->frame_write_index = 0;
 +    ctx->initParams.channelID = 0;
@@ -401,7 +400,7 @@ diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/lib
 +    StartQsCheckServer(avctx);
 +    ret = HWD_Create(&ctx->handle, &ctx->initParams);
 +    if (ret != HW265D_OK) {
-+        av_log(avctx, AV_LOG_ERROR, "ERROR: IHW265D_Create fail\n");
++        av_log(avctx, AV_LOG_ERROR, "ERROR: HW265DEC create fail\n");
 +        return AVERROR(EINVAL);   
 +    }
 +
