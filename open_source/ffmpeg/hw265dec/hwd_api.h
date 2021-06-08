@@ -248,8 +248,6 @@ typedef enum TAG_HWD_RETURNVAL {
     HW265D_FRAME_DECODE_WARN                // frame Decode warning
 } HWD_RETURNVAL;
 
-#define HWD_API
-
 /*
  * Instruction : create decoder handle
  *
@@ -259,7 +257,7 @@ typedef enum TAG_HWD_RETURNVAL {
  * Return Value : Success return HW265D_OK
  *                Failed return err code
  */
-HWD_API HWD_RETURNVAL HWD_Create(HWD_Handle *decoderHandle, HWDCreateParams *createParams);
+HWD_RETURNVAL HWD_Create(HWD_Handle *decoderHandle, HWDCreateParams *createParams);
 
 /*
  * Instruction : decode a frame data
@@ -271,7 +269,7 @@ HWD_API HWD_RETURNVAL HWD_Create(HWD_Handle *decoderHandle, HWDCreateParams *cre
  * Return Value : Success return HW265D_OK
  *                Failed return err code
  */
-HWD_API HWD_RETURNVAL HWD_DecodeAU(HWD_Handle decoderHandle, HWDInputParams *inputParams,
+HWD_RETURNVAL HWD_DecodeAU(HWD_Handle decoderHandle, HWDInputParams *inputParams,
     HWDOutputParams *outputParams);
 
 /*
@@ -284,7 +282,7 @@ HWD_API HWD_RETURNVAL HWD_DecodeAU(HWD_Handle decoderHandle, HWDInputParams *inp
  * Return Value : Success return HW265D_OK / HW265D_NEED_MORE_BITS
  *                Failed return err code
  */
-HWD_API HWD_RETURNVAL HWD_DecodeStream(HWD_Handle decoderHandle, HWDInputParams *inputParams,
+HWD_RETURNVAL HWD_DecodeStream(HWD_Handle decoderHandle, HWDInputParams *inputParams,
     HWDOutputParams *outputParams);
 
 /*
@@ -295,17 +293,17 @@ HWD_API HWD_RETURNVAL HWD_DecodeStream(HWD_Handle decoderHandle, HWDInputParams 
  * Return Value : Success return HW265D_OK
  *                Failed return err code
  */
-HWD_API HWD_RETURNVAL HWD_Delete(HWD_Handle decoderHandle);
+HWD_RETURNVAL HWD_Delete(HWD_Handle decoderHandle);
 
 /*
  * Instruction : get decoder version
  *
  * Param : version           - [out] version number struct pointer
  *
- * Return Value : Success return version information
+ * Return Value : Success return HW265D_OK
  *                Failed return err code
  */
-HWD_API HWD_RETURNVAL HWD_GetVersion(HWDVersion *version);
+HWD_RETURNVAL HWD_GetVersion(HWDVersion *version);
 
 #ifdef __cplusplus
 }

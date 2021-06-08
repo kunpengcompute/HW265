@@ -5,7 +5,7 @@ diff -urN ffmpeg-4.3/configure ffmpeg-4.3-hw265dec/configure
    --enable-libwebp         enable WebP encoding via libwebp [no]
    --enable-libx264         enable H.264 encoding via x264 [no]
    --enable-libx265         enable HEVC encoding via x265 [no]
-+  --enable-libhw265dec     enable HEVC encoding via hw265dec [no]
++  --enable-libhw265dec     enable HEVC decoding via hw265dec [no]
    --enable-libxavs         enable AVS encoding via xavs [no]
    --enable-libxavs2        enable AVS2 encoding via xavs2 [no]
    --enable-libxcb          enable X11 grabbing using XCB [autodetect]
