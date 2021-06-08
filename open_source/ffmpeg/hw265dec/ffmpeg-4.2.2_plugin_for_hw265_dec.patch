@@ -1,7 +1,7 @@
-diff -urN ffmpeg-4.3/configure ffmpeg-4.3-hw265dec/configure
---- ffmpeg-4.3/configure	2020-06-16 02:54:23.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/configure	2021-04-26 20:01:58.279348206 +0800
-@@ -285,6 +285,7 @@
+diff -urN ffmpeg-4.2.2/configure ffmpeg-4.2.2-hw265dec/configure
+--- ffmpeg-4.2.2/configure	2021-06-08 14:25:34.639238518 +0800
++++ ffmpeg-4.2.2-hw265dec/configure	2021-06-08 14:31:53.543263913 +0800
+@@ -282,6 +282,7 @@
    --enable-libwebp         enable WebP encoding via libwebp [no]
    --enable-libx264         enable H.264 encoding via x264 [no]
    --enable-libx265         enable HEVC encoding via x265 [no]
@@ -9,7 +9,7 @@ diff -urN ffmpeg-4.3/configure ffmpeg-4.3-hw265dec/configure
    --enable-libxavs         enable AVS encoding via xavs [no]
    --enable-libxavs2        enable AVS2 encoding via xavs2 [no]
    --enable-libxcb          enable X11 grabbing using XCB [autodetect]
-@@ -1822,6 +1823,7 @@
+@@ -1812,6 +1813,7 @@
      opengl
      pocketsphinx
      vapoursynth
@@ -17,7 +17,7 @@ diff -urN ffmpeg-4.3/configure ffmpeg-4.3-hw265dec/configure
  "
  
  HWACCEL_AUTODETECT_LIBRARY_LIST="
-@@ -3259,6 +3261,7 @@
+@@ -3210,6 +3212,7 @@
  libx264rgb_encoder_deps="libx264 x264_csp_bgr"
  libx264rgb_encoder_select="libx264_encoder"
  libx265_encoder_deps="libx265"
@@ -25,18 +25,18 @@ diff -urN ffmpeg-4.3/configure ffmpeg-4.3-hw265dec/configure
  libxavs_encoder_deps="libxavs"
  libxavs2_encoder_deps="libxavs2"
  libxvid_encoder_deps="libxvid"
-@@ -6416,6 +6419,7 @@
+@@ -6310,6 +6313,7 @@
                               check_cpp_condition libx262 x264.h "X264_MPEG2"
  enabled libx265           && require_pkg_config libx265 x265 x265.h x265_api_get &&
-                              require_cpp_condition libx265 x265.h "X265_BUILD >= 70"
+                              require_cpp_condition libx265 x265.h "X265_BUILD >= 68"
 +enabled libhw265dec       && require libhw265dec "hwd_api.h" HWD_DecodeStream "-lhw265dec"
  enabled libxavs           && require libxavs "stdint.h xavs.h" xavs_encoder_encode "-lxavs $pthreads_extralibs $libm_extralibs"
  enabled libxavs2          && require_pkg_config libxavs2 "xavs2 >= 1.3.0" "stdint.h xavs2.h" xavs2_api_get
  enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
-diff -urN ffmpeg-4.3/libavcodec/allcodecs.c ffmpeg-4.3-hw265dec/libavcodec/allcodecs.c
---- ffmpeg-4.3/libavcodec/allcodecs.c	2020-06-16 02:54:24.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/libavcodec/allcodecs.c	2021-04-26 20:01:58.279348206 +0800
-@@ -146,6 +146,7 @@
+diff -urN ffmpeg-4.2.2/libavcodec/allcodecs.c ffmpeg-4.2.2-hw265dec/libavcodec/allcodecs.c
+--- ffmpeg-4.2.2/libavcodec/allcodecs.c	2021-06-08 14:25:34.715239352 +0800
++++ ffmpeg-4.2.2-hw265dec/libavcodec/allcodecs.c	2021-06-08 14:25:54.195452798 +0800
+@@ -145,6 +145,7 @@
  extern AVCodec ff_h264_rkmpp_decoder;
  extern AVCodec ff_hap_encoder;
  extern AVCodec ff_hap_decoder;
@@ -44,9 +44,9 @@ diff -urN ffmpeg-4.3/libavcodec/allcodecs.c ffmpeg-4.3-hw265dec/libavcodec/allco
  extern AVCodec ff_hevc_decoder;
  extern AVCodec ff_hevc_qsv_decoder;
  extern AVCodec ff_hevc_rkmpp_decoder;
-diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c
---- ffmpeg-4.3/libavcodec/libhw265dec.c	1970-01-01 08:00:00.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/libavcodec/libhw265dec.c	2021-06-04 19:02:20.979801596 +0800
+diff -urN ffmpeg-4.2.2/libavcodec/libhw265dec.c ffmpeg-4.2.2-hw265dec/libavcodec/libhw265dec.c
+--- ffmpeg-4.2.2/libavcodec/libhw265dec.c	1970-01-01 08:00:00.000000000 +0800
++++ ffmpeg-4.2.2-hw265dec/libavcodec/libhw265dec.c	2021-06-08 14:25:54.195452798 +0800
 @@ -0,0 +1,662 @@
 +/*
 + * HW265DEC decoder for hevc
@@ -710,10 +710,10 @@ diff -urN ffmpeg-4.3/libavcodec/libhw265dec.c ffmpeg-4.3-hw265dec/libavcodec/lib
 +    .defaults           = hw265_decoder_defaults,
 +    .capabilities       = AV_CODEC_CAP_DELAY, 
 +};
-diff -urN ffmpeg-4.3/libavcodec/Makefile ffmpeg-4.3-hw265dec/libavcodec/Makefile
---- ffmpeg-4.3/libavcodec/Makefile	2020-06-16 02:54:24.000000000 +0800
-+++ ffmpeg-4.3-hw265dec/libavcodec/Makefile	2021-04-26 20:01:58.279348206 +0800
-@@ -1040,6 +1040,7 @@
+diff -urN ffmpeg-4.2.2/libavcodec/Makefile ffmpeg-4.2.2-hw265dec/libavcodec/Makefile
+--- ffmpeg-4.2.2/libavcodec/Makefile	2021-06-08 14:25:34.727239484 +0800
++++ ffmpeg-4.2.2-hw265dec/libavcodec/Makefile	2021-06-08 14:25:54.199452842 +0800
+@@ -1007,6 +1007,7 @@
  OBJS-$(CONFIG_LIBX262_ENCODER)            += libx264.o
  OBJS-$(CONFIG_LIBX264_ENCODER)            += libx264.o
  OBJS-$(CONFIG_LIBX265_ENCODER)            += libx265.o
