@@ -161,7 +161,7 @@ diff -urpN FFmpeg-n6.0.1/libavcodec/libhw265dec.c FFmpeg-n6.0.1-hw265dec/libavco
 +    {"max_width",   "pic max width [320, 16384], default 4096",     OFFSET(picMaxWidth),    AV_OPT_TYPE_INT, {.i64 = 4096}, PIC_MIN_WIDTH, PIC_MAX_WIDTH, VE},
 +    {"max_height",  "pic max height [320, 16384], default 2160",    OFFSET(picMaxHeight),   AV_OPT_TYPE_INT, {.i64 = 2160}, PIC_MIN_HEIGHT, PIC_MAX_HEIGHT, VE},
 +    {"max_ref_num", "pic max ref num [0, 15], default 15",          OFFSET(maxRefNum),      AV_OPT_TYPE_INT, {.i64 = 15}, 0, MAX_REF_NUM, VE},
-+    {"threads_num",  "multi thread num [1, 16], default 4",         OFFSET(threadsNum),     AV_OPT_TYPE_INT, {.i64 = 0}, 0, MAX_THREADS_NUM, VE},
++    {"threads_num",  "multi thread num [1, 16], default 0",         OFFSET(threadsNum),     AV_OPT_TYPE_INT, {.i64 = 0}, 0, MAX_THREADS_NUM, VE},
 +    {"max_vps_num", "max vps num [1, 16], default 16",              OFFSET(maxVPSNum),      AV_OPT_TYPE_INT, {.i64 = 16}, 1, MAX_VPS_NUM, VE},
 +    {"max_sps_num", "max sps num [1, 16], default 16",              OFFSET(maxSPSNum),      AV_OPT_TYPE_INT, {.i64 = 16}, 1, MAX_SPS_NUM, VE},
 +    {"max_pps_num", "max pps num [1, 64], default 64",              OFFSET(maxPPSNum),      AV_OPT_TYPE_INT, {.i64 = 64}, 1, MAX_PPS_NUM, VE},
