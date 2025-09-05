@@ -1,0 +1,600 @@
+diff -uprN tmp/ffmpeg-7.0.1/configure ffmpeg-7.0.1/configure
+--- tmp/ffmpeg-7.0.1/configure	2024-04-05 07:22:59.000000000 +0800
++++ ffmpeg-7.0.1/configure	2025-07-23 11:10:19.078660836 +0800
+@@ -294,6 +294,7 @@ External library support:
+   --enable-libwebp         enable WebP encoding via libwebp [no]
+   --enable-libx264         enable H.264 encoding via x264 [no]
+   --enable-libx265         enable HEVC encoding via x265 [no]
++  --enable-libhw265        enable HEVC encoding via hw265 [no]
+   --enable-libxeve         enable EVC encoding via libxeve [no]
+   --enable-libxevd         enable EVC decoding via libxevd [no]
+   --enable-libxavs         enable AVS encoding via xavs [no]
+@@ -1865,6 +1866,7 @@ EXTERNAL_LIBRARY_GPL_LIST="
+     libvidstab
+     libx264
+     libx265
++    libhw265
+     libxavs
+     libxavs2
+     libxvid
+@@ -3543,6 +3545,7 @@ libx264rgb_encoder_deps="libx264"
+ libx264rgb_encoder_select="libx264_encoder"
+ libx265_encoder_deps="libx265"
+ libx265_encoder_select="atsc_a53"
++libhw265_encoder_deps="libhw265"
+ libxavs_encoder_deps="libxavs"
+ libxavs2_encoder_deps="libxavs2"
+ libxevd_decoder_deps="libxevd"
+@@ -7002,6 +7005,7 @@ enabled libx264            &&require_pkg
+                              check_cpp_condition libx262 x264.h "X264_MPEG2"
+ enabled libx265           && require_pkg_config libx265 x265 x265.h x265_api_get &&
+                              require_cpp_condition libx265 x265.h "X265_BUILD >= 89"
++enabled libhw265          && require libhw265 "hwe_api.h" HWE_Process "-lhw265"
+ enabled libxavs           && require libxavs "stdint.h xavs.h" xavs_encoder_encode "-lxavs $pthreads_extralibs $libm_extralibs"
+ enabled libxavs2          && require_pkg_config libxavs2 "xavs2 >= 1.3.0" "stdint.h xavs2.h" xavs2_api_get
+ enabled libxevd           && require_pkg_config libxevd "xevd >= 0.4.1" "xevd.h" xevd_decode
+diff -uprN tmp/ffmpeg-7.0.1/libavcodec/allcodecs.c ffmpeg-7.0.1/libavcodec/allcodecs.c
+--- tmp/ffmpeg-7.0.1/libavcodec/allcodecs.c	2024-04-05 07:22:59.000000000 +0800
++++ ffmpeg-7.0.1/libavcodec/allcodecs.c	2025-07-23 11:10:19.078660836 +0800
+@@ -814,6 +814,7 @@ extern LIBX264_CONST FFCodec ff_libx264_
+ #endif
+ extern const FFCodec ff_libx264rgb_encoder;
+ extern FFCodec ff_libx265_encoder;
++extern FFCodec ff_libhw265_encoder;
+ extern const FFCodec ff_libxeve_encoder;
+ extern const FFCodec ff_libxevd_decoder;
+ extern const FFCodec ff_libxavs_encoder;
+diff -uprN tmp/ffmpeg-7.0.1/libavcodec/libhw265.c ffmpeg-7.0.1/libavcodec/libhw265.c
+--- tmp/ffmpeg-7.0.1/libavcodec/libhw265.c	1970-01-01 08:00:00.000000000 +0800
++++ ffmpeg-7.0.1/libavcodec/libhw265.c	2025-07-23 11:11:18.406550934 +0800
+@@ -0,0 +1,520 @@
++/*
++ * HW265 encoder library plugin for FFmpeg
++ *
++ * Copyright (c) Huawei Technologies Co., Ltd. 2020-2020. All rights reserved.
++ *
++ * This file is part of FFmpeg.
++ *
++ * FFmpeg is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * FFmpeg is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with FFmpeg; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#include "hwe_api.h"
++#include <string.h>
++#include <float.h>
++#include <pthread.h>
++#include <unistd.h>
++#include "libavutil/internal.h"
++#include "libavutil/common.h"
++#include "libavutil/opt.h"
++#include "libavutil/pixdesc.h"
++#include "avcodec.h"
++#include "codec_internal.h"
++#include "packet_internal.h"
++#include "encode.h"
++
++#define PKT_BUF_DEEP 10
++#define MAX_PKT_BUF_SIZE (1 << PKT_BUF_DEEP)
++#define PKT_QUE_MASK (MAX_PKT_BUF_SIZE - 1)
++
++typedef struct Libhw265Context {
++    const AVClass *class;
++
++    HWE_CreateParams creatParams;
++    HWE_Input input;
++    HWE_Handle encHandle;
++    AVCodecContext *pOutHandle;
++
++    int channelID;
++    int pixelFormat;
++
++    int picWidth;
++    int picHeight;
++
++    int bitRate;
++    float frameRate;
++    int logLevel;
++
++    int fpsNum;
++    int timeBaseNum;
++
++    int delayFrameNum;
++    int enableAdaptiveIframe;
++    int adaptiveBframe;
++    int MbTree;
++    int enableDelayTimeControl;
++    int delayTime;
++
++    int analysisThreadNum;
++
++    int pass;
++    int initQP;
++    int rcBufferSize;
++    int rcMode;
++    int crf;
++    int isConstFramerate;
++    int enableResetBitrate;
++    float bitratePar;
++    float bitrateParCtrlStrength;
++
++    int intraPeriod;
++    int bframesNum;
++    int enableRefBframe;
++    int frameThreadNum;
++    int wppThreadNum;
++    int profile;
++    int qualitySet;
++    int enablefixedIdrPeriod;
++
++    AVPacket *pktBuffer[MAX_PKT_BUF_SIZE];
++    volatile unsigned int pktWriteIndex;
++    volatile unsigned int pktReadIndex;
++    unsigned int pktQueueMask;
++    pthread_mutex_t pktBufMutex;
++    unsigned int totalFrame;
++
++    int isSendEND;
++    int isCodeEND;
++} Libhw265Context;
++
++static int Libhw265ReceivePacket(AVCodecContext *avctx, AVPacket *pkt)
++{
++    Libhw265Context *ctx = avctx->priv_data;
++    while (ctx->pktWriteIndex == ctx->pktReadIndex) {
++        if (!ctx->isSendEND || (ctx->isSendEND && ctx->isCodeEND)) {
++            return AVERROR(EAGAIN);
++        }
++        usleep(10); // sleep 10 us
++    }
++    pthread_mutex_lock(&ctx->pktBufMutex);
++    *pkt = *(ctx->pktBuffer[ctx->pktReadIndex & ctx->pktQueueMask]);
++    av_freep(&(ctx->pktBuffer[ctx->pktReadIndex & ctx->pktQueueMask]));
++    ctx->pktReadIndex++;
++    pthread_mutex_unlock(&ctx->pktBufMutex);
++    return 0;
++}
++
++static enum AVPictureType SetPictType(enum HWE_FrameType frameType)
++{
++    enum AVPictureType result;
++    switch (frameType) {
++        case HWE_FRAME_TYPE_P:
++            result = AV_PICTURE_TYPE_P;
++            break;
++        case HWE_FRAME_TYPE_B:
++            result = AV_PICTURE_TYPE_B;
++            break;
++        default:
++            result = AV_PICTURE_TYPE_I;
++    }
++    return result;
++}
++
++static HWE_ReturnVal Libhw265EncodeDone(unsigned int channelID, void *outHandle, HWE_Output *outputData)
++{
++    Libhw265Context *ctx = (Libhw265Context *)outHandle;
++    AVCodecContext *avctx = ctx->pOutHandle;
++    int ret;
++    int payload;
++    AVPacket *pkt = NULL;
++    pkt = av_packet_alloc();
++    if (!pkt) {
++        av_log(avctx, AV_LOG_ERROR, "Error alloc pkt failed.\n");
++        return HWE_RET_FAILED;
++    }
++    av_init_packet(pkt);
++
++    if (!outputData->outData.dataAddr || outputData->outData.dataLen <= 0) {
++        ctx->isCodeEND = 1;
++        return HWE_RET_OK;
++    }
++    payload = outputData->outData.dataLen;
++    ret = av_new_packet(pkt, payload);
++    if (ret < 0) {
++        av_log(avctx, AV_LOG_ERROR, "Error new pkt failed.\n");
++        return HWE_RET_FAILED;
++    }
++    memcpy(pkt->data, outputData->outData.dataAddr, payload);
++    pkt->pts = outputData->outFrameInfo.pts;
++    pkt->dts = outputData->outFrameInfo.dts;
++
++    if (outputData->outFrameInfo.frameType == HWE_FRAME_TYPE_B) {
++        pkt->flags |= AV_PKT_FLAG_KEY;
++    } else {
++        pkt->flags |= 0;
++    }
++    pthread_mutex_lock(&ctx->pktBufMutex);
++    if (ctx->pktWriteIndex - ctx->pktReadIndex < MAX_PKT_BUF_SIZE) {
++        ctx->pktBuffer[ctx->pktWriteIndex & ctx->pktQueueMask] = pkt;
++        ctx->pktWriteIndex++;
++        pthread_mutex_unlock(&ctx->pktBufMutex);
++    } else {
++        pthread_mutex_unlock(&ctx->pktBufMutex);
++        av_log(avctx, AV_LOG_ERROR, "hw265 pkt buf is full pktBuffer, Write index = %d, Read index = %d\n",
++            ctx->pktWriteIndex, ctx->pktReadIndex);
++        av_packet_free(&pkt);
++    }
++    return HWE_RET_OK;
++}
++
++static av_cold int Libhw265EncodeClose(AVCodecContext *avctx)
++{
++    Libhw265Context *ctx = avctx->priv_data;
++    int ret = HWE_Flush(ctx->encHandle);
++    if (ret != HWE_RET_OK) {
++        av_log(avctx, AV_LOG_ERROR, "ERROR: HWE_Flush failed.\n");
++    }
++
++    ret = HWE_Delete(ctx->encHandle);
++    if (ret != HWE_RET_OK) {
++        av_log(avctx, AV_LOG_ERROR, "ERROR: HWE_Delete failed.\n");
++    }
++    return 0;
++}
++
++static int SetDefaultValue(AVCodecContext *avctx)
++{
++    Libhw265Context *ctx = avctx->priv_data;
++    int ret;
++    ctx->pOutHandle = avctx;
++    ctx->totalFrame = 0;
++    ctx->pktQueueMask = PKT_QUE_MASK;
++    ctx->pktReadIndex = 0;
++    ctx->pktWriteIndex = 0;
++    ctx->isCodeEND = 0;
++    ctx->isSendEND = 0;
++    memset(&ctx->input, 0, sizeof(HWE_Input));
++    ctx->encHandle = NULL;
++
++    // Default value
++    ret = HWE_ParamDefault(&ctx->creatParams);
++    if (ret != HWE_RET_OK) {
++        av_log(avctx, AV_LOG_ERROR, "ERROR: HWE_ParamDefault failed.\n");
++        Libhw265EncodeClose(avctx);
++        return HWE_RET_FAILED;
++    }
++
++    return HWE_RET_OK;
++}
++
++static void SetFfmpegValue(AVCodecContext *avctx)
++{
++    Libhw265Context *ctx = avctx->priv_data;
++    if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
++        ctx->creatParams.fpsNum = avctx->framerate.num;
++        ctx->creatParams.fpsDen = avctx->framerate.den;
++        ctx->creatParams.rcParam.timeBaseDen = avctx->time_base.den;
++        ctx->creatParams.rcParam.timeBaseNum = avctx->time_base.num;
++    } else {
++        ctx->creatParams.fpsNum = avctx->time_base.den;
++        ctx->creatParams.fpsDen = avctx->time_base.num * avctx->ticks_per_frame;
++        ctx->creatParams.rcParam.timeBaseDen = avctx->time_base.den;
++        ctx->creatParams.rcParam.timeBaseNum = avctx->time_base.num;
++    }
++    ctx->frameRate = ((float)ctx->creatParams.fpsNum) / ctx->creatParams.fpsDen;
++    ctx->creatParams.picWidth = avctx->width;
++    ctx->creatParams.picHeight = avctx->height;
++    if (avctx->bit_rate > 0) {
++        ctx->creatParams.bitRate = avctx->bit_rate / 1000; // Unit conversion, divided by 1000
++        ctx->creatParams.rcParam.rcMode = HWE_RC_ABR;
++    }
++    if (ctx->initQP >= 0) {
++        ctx->creatParams.rcParam.initQP = ctx->initQP;
++        ctx->creatParams.rcParam.rcMode = HWE_RC_CQP;
++    }
++    if (avctx->gop_size > 0) {
++        ctx->creatParams.h265eCodecParam.intraPeriod = avctx->gop_size;
++    }
++    if (avctx->max_b_frames >= 0) {
++        ctx->creatParams.h265eCodecParam.bframesNum = avctx->max_b_frames;
++    }
++    ctx->creatParams.rcParam.pass = 0;
++    if (avctx->flags & AV_CODEC_FLAG_PASS1) {
++        ctx->creatParams.rcParam.pass = 1;
++    }
++    if (avctx->flags & AV_CODEC_FLAG_PASS2) {
++        ctx->creatParams.rcParam.pass = 2;
++    }
++    if (avctx->pix_fmt == AV_PIX_FMT_YUVJ420P) {
++        ctx->creatParams.h265eCodecParam.vuiParams.fullRange = 1;
++    }
++    return;
++}
++
++static void SetInputValue(AVCodecContext *avctx)
++{
++    Libhw265Context *ctx = avctx->priv_data;
++    ctx->creatParams.channelID = (ctx->channelID >= 0) ? ctx->channelID : ctx->creatParams.channelID;
++    ctx->creatParams.logLevel = (ctx->logLevel >= 0) ? ctx->logLevel : ctx->creatParams.logLevel;
++    ctx->creatParams.preAnalysisParam.delayFrameNum = (ctx->delayFrameNum >= 0) ? ctx->delayFrameNum : 25;
++    ctx->creatParams.preAnalysisParam.enableAdaptiveIframe = (ctx->enableAdaptiveIframe >= 0) ?
++        ctx->enableAdaptiveIframe :
++        ctx->creatParams.preAnalysisParam.enableAdaptiveIframe;
++    ctx->creatParams.preAnalysisParam.adaptiveBframe = (ctx->adaptiveBframe >= 0) ?
++        ctx->adaptiveBframe :
++        ctx->creatParams.preAnalysisParam.adaptiveBframe;
++    ctx->creatParams.preAnalysisParam.enableDelayTimeControl = (ctx->enableDelayTimeControl >= 0) ?
++        ctx->enableDelayTimeControl :
++        ctx->creatParams.preAnalysisParam.enableDelayTimeControl;
++    ctx->creatParams.preAnalysisParam.delayTime = (ctx->delayTime >= 0) ?
++        ctx->delayTime :
++        ctx->creatParams.preAnalysisParam.delayTime;
++    ctx->creatParams.preAnalysisParam.enableMbTree = (ctx->MbTree >= 0) ?
++        ctx->MbTree :
++        ctx->creatParams.preAnalysisParam.enableMbTree;
++    ctx->creatParams.preAnalysisParam.analysisThreadNum =
++        (ctx->analysisThreadNum >= 0) ? ctx->analysisThreadNum : ctx->creatParams.preAnalysisParam.analysisThreadNum;
++    ctx->creatParams.h265eCodecParam.enableRefBframe =
++        (ctx->enableRefBframe >= 0) ? ctx->enableRefBframe : ctx->creatParams.h265eCodecParam.enableRefBframe;
++    ctx->creatParams.h265eCodecParam.frameThreadNum =
++        (ctx->frameThreadNum >= 0) ? ctx->frameThreadNum : ctx->creatParams.h265eCodecParam.frameThreadNum;
++    ctx->creatParams.h265eCodecParam.wppThreadNum =
++        (ctx->wppThreadNum >= 0) ? ctx->wppThreadNum : ctx->creatParams.h265eCodecParam.wppThreadNum;
++    ctx->creatParams.h265eCodecParam.profile =
++        (ctx->profile >= 0) ? ctx->profile : ctx->creatParams.h265eCodecParam.profile;
++    ctx->creatParams.h265eCodecParam.qualitySet =
++        (ctx->qualitySet >= 0) ? ctx->qualitySet : ctx->creatParams.h265eCodecParam.qualitySet;
++    ctx->creatParams.h265eCodecParam.intraPeriod = 
++        (ctx->intraPeriod >= 0) ? ctx->intraPeriod : ctx->creatParams.h265eCodecParam.intraPeriod;
++    ctx->creatParams.h265eCodecParam.bframesNum = 
++        (ctx->bframesNum >= 0) ? ctx->bframesNum : ctx->creatParams.h265eCodecParam.bframesNum;
++    ctx->creatParams.h265eCodecParam.enablefixedIdrPeriod = 
++        (ctx->enablefixedIdrPeriod >= 0) ? ctx->enablefixedIdrPeriod : ctx->creatParams.h265eCodecParam.enablefixedIdrPeriod;
++    if (ctx->bitRate < 40 || ctx->bitRate > 300000) {
++        ctx->bitRate = 2000;
++    }
++    ctx->creatParams.bitRate = (ctx->bitRate >= 0) ? ctx->bitRate : ctx->creatParams.bitRate;
++    if (ctx->pass < 0 || ctx->pass > 2) {
++        ctx->pass = 0;
++    }
++    ctx->creatParams.rcParam.pass = (ctx->pass >= 0) ? ctx->pass : ctx->creatParams.rcParam.pass;
++    if (ctx->rcMode < 0 || ctx->rcMode > 2) {
++        ctx->rcMode = 0;
++    }
++    ctx->creatParams.rcParam.rcMode = (ctx->rcMode >= 0) ? ctx->rcMode : ctx->creatParams.rcParam.rcMode;
++    if (ctx->crf < 0 || ctx->crf > 51) {
++        ctx->crf = 23;
++    }
++    ctx->creatParams.rcParam.crf = (ctx->crf >= 0) ? ctx->crf : ctx->creatParams.rcParam.crf;
++
++    if (ctx->fpsNum <= 0 || ctx->fpsNum > 120) {
++        ctx->fpsNum = 25;
++    }
++    ctx->creatParams.fpsNum = (ctx->fpsNum > 0) ? ctx->fpsNum : ctx->creatParams.fpsNum;
++    ctx->creatParams.fpsDen = 1;
++    ctx->creatParams.rcParam.timeBaseDen = ctx->creatParams.fpsNum;
++    ctx->creatParams.rcParam.timeBaseNum = ctx->creatParams.fpsDen;
++
++    ctx->creatParams.rcParam.isConstFramerate = (ctx->isConstFramerate >= 0) ?
++       ctx->isConstFramerate :
++       ctx->creatParams.rcParam.isConstFramerate;
++
++    ctx->creatParams.rcParam.isConstFramerate = (ctx->isConstFramerate >= 0) ?
++       ctx->isConstFramerate :
++       ctx->creatParams.rcParam.isConstFramerate;
++    ctx->creatParams.rcParam.enableResetBitrate = (ctx->enableResetBitrate >= 0) ?
++       ctx->enableResetBitrate :
++       ctx->creatParams.rcParam.enableResetBitrate;
++
++
++    if (ctx->bitratePar < 1 || ctx->bitratePar > 20) {
++        ctx->bitratePar = 4;
++    }
++    ctx->creatParams.rcParam.bitratePar = (ctx->bitratePar >= 0) ? ctx->bitratePar : ctx->creatParams.rcParam.bitratePar;
++
++    ctx->creatParams.rcParam.bitrateParCtrlStrength = (ctx->bitrateParCtrlStrength >= 0) ?
++        ctx->bitrateParCtrlStrength :
++        ctx->creatParams.rcParam.bitrateParCtrlStrength;
++    return;
++}
++
++static av_cold int Libhw265EncodeInit(AVCodecContext *avctx)
++{
++    Libhw265Context *ctx = avctx->priv_data;
++    HWE_Output outputData;
++    int ret;
++
++    if (SetDefaultValue(avctx) == HWE_RET_FAILED) {
++        return AVERROR_INVALIDDATA;
++    }
++    SetFfmpegValue(avctx);
++    SetInputValue(avctx);
++
++    ctx->creatParams.callbackFuns.outHandle = (const void *)ctx;
++    ctx->creatParams.callbackFuns.logCallback = NULL;
++    ctx->creatParams.callbackFuns.mallocCallback = NULL;
++    ctx->creatParams.callbackFuns.freeCallback = NULL;
++    ctx->creatParams.callbackFuns.encodeDoneCallback = Libhw265EncodeDone;
++
++    ret = HWE_Create(&ctx->encHandle, &ctx->creatParams);
++    if (ret != HWE_RET_OK) {
++        av_log(avctx, AV_LOG_ERROR, "ERROR: HWE_Create failed.\n");
++        return AVERROR(ENOMEM);
++    }
++    ret = HWE_GetHeader(ctx->encHandle, &outputData);
++    if (ret != HWE_RET_OK) {
++        av_log(avctx, AV_LOG_ERROR, "Cannot encode headers.\n");
++        Libhw265EncodeClose(avctx);
++        return AVERROR(ENOMEM);
++    }
++    avctx->extradata_size = outputData.outData.dataLen;
++    avctx->extradata = av_malloc(avctx->extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
++    if (NULL == avctx->extradata) {
++        av_log(avctx, AV_LOG_ERROR, "Cannot allocate HEVC header of size %d.\n", avctx->extradata_size);
++        Libhw265EncodeClose(avctx);
++        return AVERROR(ENOMEM);
++    }
++    memcpy(avctx->extradata, outputData.outData.dataAddr, avctx->extradata_size);
++    memset(avctx->extradata + avctx->extradata_size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
++    return 0;
++}
++
++static int Libhw265EncodeFrame(AVCodecContext *avctx, AVPacket *pkt, const AVFrame *pic, int *gotPacket)
++{
++    int ret;
++    Libhw265Context *ctx = avctx->priv_data;
++
++    if (pic) {
++        for (int i = 0; i < HWE_MAX_PLANE; ++i) {
++            ctx->input.inData.pixel[i] = pic->data[i];
++            ctx->input.inData.stride[i] = pic->linesize[i];
++        }
++
++        int chromShift = 0;
++        if (ctx->creatParams.pixelFormat == HWE_YUV420P) {
++            chromShift = 1;
++        }
++
++        ctx->input.inData.pixelSize[0] = ctx->input.inData.stride[0] * ctx->creatParams.picHeight;
++        ctx->input.inData.pixelSize[1] = ctx->input.inData.stride[1] * (ctx->creatParams.picHeight >> chromShift);
++        ctx->input.inData.pixelSize[2] = ctx->input.inData.stride[2] * (ctx->creatParams.picHeight >> chromShift);
++
++        ctx->input.inFrameInfo.pts = pic->pts;
++        ctx->input.inFrameInfo.framePktSize = pic->pkt_size;
++
++        if (pic->pict_type != AV_PICTURE_TYPE_NONE) {
++           ctx->input.inFrameInfo.frameType = SetPictType(pic->pict_type);
++        } else {
++           ctx->input.inFrameInfo.frameType = HWE_FRAME_TYPE_INVALID;
++        }
++
++        ret = HWE_Process(ctx->encHandle, &ctx->input);
++        if (ret != HWE_RET_OK) {
++            av_log(avctx, AV_LOG_ERROR, "ERROR: HWE_Process failed.\n");
++            Libhw265EncodeClose(avctx);
++            return ret;
++        }
++    } else {
++        ret = HWE_Flush(ctx->encHandle);
++        ctx->isSendEND = 1;
++    }
++    ret = Libhw265ReceivePacket(avctx, pkt);
++    if (ret != AVERROR(EAGAIN)) {
++        *gotPacket = 1;
++    } else {
++        *gotPacket = 0;
++    }
++    return 0;
++}
++
++static const enum AVPixelFormat hw265_csp_eight[] = {
++    AV_PIX_FMT_YUV420P, 
++    AV_PIX_FMT_YUVJ420P, 
++    AV_PIX_FMT_YUV422P, 
++    AV_PIX_FMT_YUVJ422P, 
++    AV_PIX_FMT_YUV444P, 
++    AV_PIX_FMT_YUVJ444P, 
++    AV_PIX_FMT_GBRP,
++    AV_PIX_FMT_GRAY8, 
++    AV_PIX_FMT_NONE
++};
++
++static av_cold void libhw265_encode_init_csp(FFCodec *codec)
++{
++     codec->p.pix_fmts = hw265_csp_eight;   
++}
++
++#define OFFSET(x) offsetof(Libhw265Context, x)
++#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
++
++static const AVOption OPTIONS[] = {
++    {"channel",           "Channel ID for encoder[0, 65535], default 0",                               OFFSET(channelID),               AV_OPT_TYPE_INT,      {.i64 =  -1}, -1, INT_MAX, VE},
++    {"log_level",         "Log level. 0:off 1:error 2:warning 3:info 4:debug, default 1",              OFFSET(logLevel),                AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       4, VE},
++    {"delay",             "Number of frames for encoder analysis[bframes, 150], default 25",           OFFSET(delayFrameNum),           AV_OPT_TYPE_INT,      {.i64 =  -1}, -1, INT_MAX, VE},
++    {"adap_I",            "Adaptive insert I frames base on scenecut. 0:off 1:on, default 1",          OFFSET(enableAdaptiveIframe),    AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"analysis_threads",  "Number of frames for concurrent analysis. [1, 48], default 5",              OFFSET(analysisThreadNum),       AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,      48, VE},
++    {"bframe_ref",        "B frames used as reference frame. 0:off 1:on, default 1",                   OFFSET(enableRefBframe),         AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"frame_threads",     "Number of concurrently encoded frame threads[1, 38], default 12",           OFFSET(frameThreadNum),          AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,      38, VE},
++    {"wpp_threads",       "Number of concurrently encoded rows threads[1, 20], default 8",             OFFSET(wppThreadNum),            AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,      20, VE},
++    {"profile",           "Only support main profile. default 0",                                      OFFSET(profile),                 AV_OPT_TYPE_INT,      {.i64 =  -1}, -1, INT_MAX, VE},
++    {"qualityset",        "Quality level of the encoder. {2, 3, 5, 6} from slow to fast, default 3",   OFFSET(qualitySet),              AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       6, VE},
++    {"keyint",            "Distance between I-frames, not less than 1, default 12",                    OFFSET(intraPeriod),             AV_OPT_TYPE_INT,      {.i64 =  -1}, -1, INT_MAX, VE},
++    {"bframe_nums",       "Max consecutive B-frames, [0,31], default 0",                               OFFSET(bframesNum),              AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,      31, VE},
++    {"rc",                "Rate control mode, if not in {0, 1, 2}, rc_mode will be default, default is 0",   OFFSET(rcMode),            AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       2, VE},
++    {"qp",                "The initial qp used by encoder[1, 51], default 18",                         OFFSET(initQP),                  AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,      51, VE},
++    {"abr_bitrate",     "average bitrate (kbps), if not in [40kbps, 300000kbps], bitrate will be default, default is 2000", OFFSET(bitRate), AV_OPT_TYPE_INT, {.i64 =  -1}, -1, INT_MAX, VE},
++    {"crf",               "crf level, if not in [0, 51], crf will be default, default is 23",          OFFSET(crf),                     AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,      51, VE},
++    {"fps_num",            "playback framerate of the output video, if not in (0, 120], fps will be default, default is 25", OFFSET(fpsNum), AV_OPT_TYPE_INT, {.i64 =  -1}, -1,     120, VE},
++    {"cfps",               "ConstFramerate. 0:off 1:on, default 1",                                    OFFSET(isConstFramerate),        AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"enablefixedIdrPeriod",        "Fixed intervals always contain I-frames. 0:off 1:on, default 0",  OFFSET(enablefixedIdrPeriod),    AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"bitratePar",   "Peak-to-Average Bitrate Ratio, if not in [1, 20], bitratePar will be default, default is 4",  OFFSET(bitratePar), AV_OPT_TYPE_FLOAT,    {.i64 =  -1}, -1,      20, VE},
++    {"bitrateParCtrlStrength",   "Peak Control Strength, [0, 3], default 0",  OFFSET(bitrateParCtrlStrength),                           AV_OPT_TYPE_FLOAT,    {.i64 =  -1}, -1,       3, VE},
++    {"enableResetBitrate",  "enable resetBitrate. 0:off 1:on, default 0",                              OFFSET(enableResetBitrate),      AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"MbTree",             "enable MbTree. 0:off 1:on, default 1",                                     OFFSET(MbTree),                  AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"delayTime",          "Time-Domain Analysis Wait Time. [0,4000],default 0",                       OFFSET(delayTime),               AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,    4000, VE},
++    {"enableDelayTimeControl",  "Enable Time-Domain Analysis Wait Time Control. 0:off 1:on, default 0", OFFSET(enableDelayTimeControl), AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       1, VE},
++    {"adap_B",             "Adaptive insert B frames. [0, 3], default 1",                              OFFSET(adaptiveBframe),          AV_OPT_TYPE_INT,      {.i64 =  -1}, -1,       3, VE},
++    {NULL}
++};
++
++static const AVClass class = {
++    .class_name = "libhw265",
++    .item_name = av_default_item_name,
++    .option = OPTIONS,
++    .version = LIBAVUTIL_VERSION_INT,
++};
++
++static const FFCodecDefault HW265DEFAULTS[] = {
++    { NULL },
++};
++
++FFCodec ff_libhw265_encoder = {
++    .p.name = "libhw265",
++    CODEC_LONG_NAME("libhw265 H.265 / HEVC"),
++    .p.type = AVMEDIA_TYPE_VIDEO,
++    .p.id = AV_CODEC_ID_HEVC,
++    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
++                      AV_CODEC_CAP_OTHER_THREADS |
++                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
++    .p.priv_class   = &class,      
++    .p.wrapper_name = "libhw265",                
++    .init = Libhw265EncodeInit,
++    .init_static_data = libhw265_encode_init_csp,
++    FF_CODEC_ENCODE_CB(Libhw265EncodeFrame),
++    .close = Libhw265EncodeClose,
++    .priv_data_size = sizeof(Libhw265Context),
++    .defaults = HW265DEFAULTS,
++    .caps_internal = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
++                     FF_CODEC_CAP_AUTO_THREADS,
++};
+diff -uprN tmp/ffmpeg-7.0.1/libavcodec/Makefile ffmpeg-7.0.1/libavcodec/Makefile
+--- tmp/ffmpeg-7.0.1/libavcodec/Makefile	2024-04-05 07:22:59.000000000 +0800
++++ ffmpeg-7.0.1/libavcodec/Makefile	2025-07-23 11:10:19.078660836 +0800
+@@ -1156,6 +1156,7 @@ OBJS-$(CONFIG_LIBWEBP_ANIM_ENCODER)
+ OBJS-$(CONFIG_LIBX262_ENCODER)            += libx264.o
+ OBJS-$(CONFIG_LIBX264_ENCODER)            += libx264.o
+ OBJS-$(CONFIG_LIBX265_ENCODER)            += libx265.o
++OBJS-$(CONFIG_LIBHW265_ENCODER)           += libhw265.o
+ OBJS-$(CONFIG_LIBXAVS_ENCODER)            += libxavs.o
+ OBJS-$(CONFIG_LIBXAVS2_ENCODER)           += libxavs2.o
+ OBJS-$(CONFIG_LIBXEVD_DECODER)            += libxevd.o
+diff -uprN tmp/ffmpeg-7.0.1/libavutil/avconfig.h ffmpeg-7.0.1/libavutil/avconfig.h
+--- tmp/ffmpeg-7.0.1/libavutil/avconfig.h	1970-01-01 08:00:00.000000000 +0800
++++ ffmpeg-7.0.1/libavutil/avconfig.h	2025-07-23 11:10:19.078660836 +0800
+@@ -0,0 +1,6 @@
++/* Generated by ffmpeg configure */
++#ifndef AVUTIL_AVCONFIG_H
++#define AVUTIL_AVCONFIG_H
++#define AV_HAVE_BIGENDIAN 0
++#define AV_HAVE_FAST_UNALIGNED 1
++#endif /* AVUTIL_AVCONFIG_H */
+diff -uprN tmp/ffmpeg-7.0.1/libavutil/ffversion.h ffmpeg-7.0.1/libavutil/ffversion.h
+--- tmp/ffmpeg-7.0.1/libavutil/ffversion.h	1970-01-01 08:00:00.000000000 +0800
++++ ffmpeg-7.0.1/libavutil/ffversion.h	2025-07-23 11:10:19.078660836 +0800
+@@ -0,0 +1,5 @@
++/* Automatically generated by version.sh,do not manually edit! */
++#ifndef AVUTIL_FFVERSION_H
++#define AVUTIL_FFVERSION_H
++#define FFMPEG_VERSION "7.0"
++#endif /* AVUTIL_FFVERSION_H */
